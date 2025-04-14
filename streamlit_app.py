@@ -4,7 +4,7 @@ import pytesseract
 from PIL import Image
 import openai
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+openai.api_key = st.secrets[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]
 
 st.set_page_config(page_title="Estrazione Busta Paga con AI", layout="centered")
 st.title("📄 Estrazione Intelligente da Busta Paga")
