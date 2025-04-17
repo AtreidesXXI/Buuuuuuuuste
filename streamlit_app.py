@@ -2,9 +2,9 @@ import streamlit as st
 import pdfplumber
 import pytesseract
 from PIL import Image
-import openai
+from openai import OpenAI 
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="Estrazione Busta Paga con AI", layout="centered")
 st.title("📄 Estrazione Intelligente da Busta Paga")
