@@ -40,7 +40,7 @@ Estrai in formato JSON queste informazioni da una busta paga:
   - partita_iva
 
 Testo:
-{text}
+{testo}
 """
     response = client.chat.completions.create(
         model="gpt-4",
