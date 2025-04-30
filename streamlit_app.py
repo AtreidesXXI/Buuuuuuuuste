@@ -1,78 +1,69 @@
 import streamlit as st
-from PIL import Image
-import fitz  # PyMuPDF
-import io
+import requests
 from openai import OpenAI
 
-# Inizializza client OpenAI (usando la tua chiave API GPT-4 a pagamento)
+# Inizializza OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-st.set_page_config(page_title="Estrazione Busta Paga con GPT-4 Vision", layout="centered")
-st.title("📄 Estrazione intelligente da Busta Paga con Vision")
+OCR_API_KEY = st.secrets["OCR_SPACE_API_KEY"]  # Inserita nei secrets Streamlit
 
-uploaded_file = st.file_uploader("Carica una busta paga (solo PDF)", type=["pdf"])
+st.set_page_config(page_title="Estrazione Busta Paga (OCR+GPT)", layout="centered")
+st.title("📄 Estrazione da Busta Paga con OCR + GPT-4")
 
-def convert_pdf_first_page_to_image(file):
-    doc = fitz.open(stream=file.read(), filetype="pdf")
-    page = doc.load_page(0)  # Prima pagina
-    pix = page.get_pixmap(dpi=300)
-    image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    return image
+uploaded_file = st.file_uploader("Carica una busta paga in PDF (anche scansionata)", type=["pdf"])
 
-def estrai_info_da_immagine(image):
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    buffer.seek(0)
+def estrai_testo_da_pdf_ocr(file):
+    response = requests.post(
+        "https://api.ocr.space/parse/image",
+        files={"file": file},
+        data={"language": "ita", "isOverlayRequired": False},
+        headers={"apikey": OCR_API_KEY},
+    )
+    result = response.json()
+    if result.get("IsErroredOnProcessing") or "ParsedResults" not in result:
+        return ""
+    return result["ParsedResults"][0]["ParsedText"]
 
-    response = client.chat.completions.create(
-        model="gpt-4-vision-preview",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": """
-Ti invio una busta paga sotto forma di immagine.
+def estrai_info_con_gpt(testo):
+    prompt = f"""
+Estrai in formato JSON queste informazioni da una busta paga:
 
-Per favore, estrai in formato JSON le seguenti informazioni:
-- DIPENDENTE:
+- dipendente:
   - paga_base
   - livello
   - ccnl
   - mansione
-- AZIENDA:
+
+- azienda:
   - ragione_sociale
   - indirizzo
   - partita_iva
 
-Se un'informazione non è presente, lascia il campo vuoto.
-Restituisci solo un oggetto JSON valido.
+Testo:
+{text}
 """
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": "data:image/png;base64," + buffer.getvalue().hex()
-                        }
-                    }
-                ]
-            }
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "Sei un assistente esperto in buste paga italiane."},
+            {"role": "user", "content": prompt}
         ],
-        max_tokens=1000
+        temperature=0.2
     )
-
     return response.choices[0].message.content
 
 if uploaded_file:
-    st.info("📄 Documento caricato, elaborazione in corso...")
+    st.info("📤 Documento caricato. Invio all’OCR...")
+    testo = estrai_testo_da_pdf_ocr(uploaded_file)
+    if not testo.strip():
+        st.error("⚠️ Non è stato possibile leggere testo dal PDF.")
+    else:
+        st.subheader("📜 Testo estratto (OCR):")
+        st.text_area("Testo:", testo, height=200)
 
-    image = convert_pdf_first_page_to_image(uploaded_file)
-    st.image(image, caption="📷 Anteprima prima pagina")
+        with st.spinner("📊 Estrazione dati con GPT-4 in corso..."):
+            output = estrai_info_con_gpt(testo)
+            st.success("✅ Estrazione completata!")
+            st.code(output, language="json")
 
-    with st.spinner("Estrazione con GPT-4 Vision..."):
-        output = estrai_info_da_immagine(image)
-        st.success("✅ Estrazione completata!")
-        st.subheader("📊 Risultato Estratto")
-        st.code(output, language="json")
 
